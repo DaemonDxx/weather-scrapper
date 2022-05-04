@@ -1,0 +1,56 @@
+token: b291443b79e829aa2ac83fbb01f847ba
+
+locations:
+  - description: Алтайэнерго
+    coordinates:
+      - place: Барнаул
+        lat: 53.36056
+        lon: 83.76361
+
+  - description: Бурятэнерго
+    coordinates:
+      - place: Улан - Удэ
+        lat: 51.82721
+        lon: 107.60627
+
+  - description: ГАЭС
+    coordinates:
+      - place: Горно - Алтайск
+        lat: 51.96056
+        lon: 85.91892
+
+  - description: Красноярскэнерго
+    coordinates:
+      - place: Красноярск
+        lat: 56.0152834
+        lon: 92.8932476
+
+  - description: Кузбассэнерго
+    coordinates:
+      - place: Кемерово
+        lat: 55.3450231
+        lon: 86.0623044
+
+  - description: Омскэнерго
+    coordinates:
+      - place: Омск
+        lat: 54.99244
+        lon: 73.36859
+
+  - description: Хакасэнерго
+    coordinates:
+      - place: Абакан
+        lat: 53.7175644
+        lon: 91.4293172
+
+  - description: Читаэнерго
+    coordinates:
+      - place: Абакан
+        lat: 52.03171
+        lon: 113.50087
+
+  - description: Тываэнерго
+    coordinates:
+      - place: Кызыл
+        lat: 51.71472
+        lon: 94.45338
