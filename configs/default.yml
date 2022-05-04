@@ -1,5 +1,7 @@
 token: b291443b79e829aa2ac83fbb01f847ba
 
+db: ./test.db
+
 locations:
   - description: Алтайэнерго
     coordinates:

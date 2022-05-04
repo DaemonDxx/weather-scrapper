@@ -15,6 +15,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	signal := app.Run(&config)
+	application := app.New(&config)
+	signal := application.Run()
 	os.Exit(<-signal)
 }

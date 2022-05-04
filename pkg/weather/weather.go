@@ -1,9 +1,8 @@
 package weather
 
 import (
-	"errors"
+	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 )
@@ -24,47 +23,76 @@ type Result struct {
 }
 
 type Source interface {
-	GetWeatherByDate(date *time.Time, coordinate *Coordinates) (float32, error)
+	GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *Coordinates) (float32, error)
 }
 
 type API struct {
 	source Source
 }
 
-func New(s Source) *API {
+func New(s Source) (*API, error) {
 	weather := API{source: s}
-	return &weather
+	err := weather.checkConnection()
+	return &weather, err
 }
 
-func (m *API) TemperatureOfDay(coordinates *Coordinates) (float32, error) {
+func (api *API) checkConnection() error {
+	_, err := api.TemperatureOfDay(context.Background(), &Coordinates{
+		Lon: 0,
+		Lat: 0,
+	})
+	if err != nil {
+		return fmt.Errorf("Не удалось установить соединенение с OpenWeather.com по прочине: %s", err.Error())
+	}
+	return nil
+}
+
+func (api *API) TemperatureOfDay(ctx context.Context, coordinates *Coordinates) (float32, error) {
 	date := time.Now().AddDate(0, 0, -1)
-	return m.source.GetWeatherByDate(&date, coordinates)
+	return api.source.GetWeatherByDate(ctx, &date, coordinates)
 }
 
-func (m *API) TemperatureOfDayByLocation(locations *Location) (float32, error) {
+func (api *API) TemperatureOfDayByLocation(ctx context.Context, locations *Location) (float32, error) {
 	temps := make([]float32, 0, 5)
-	errs := make([]error, 0)
-	resultsChan := make(chan *Result, 5)
-	defer close(resultsChan)
-	wg := sync.WaitGroup{}
 
-	for _, coordinates := range locations.Coordinates {
-		wg.Add(1)
-		go func(coordinates Coordinates) {
-			temp, err := m.TemperatureOfDay(&coordinates)
-			if err != nil {
-				errs = append(errs, err)
-			} else {
-				temps = append(temps, temp)
+	resultsChan := make(chan float32, len(locations.Coordinates))
+	errorsChan := make(chan error)
+
+	defer close(errorsChan)
+
+	wg := sync.WaitGroup{}
+	apiCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		for _, coordinates := range locations.Coordinates {
+			wg.Add(1)
+			go func(coordinates Coordinates) {
+				temp, err := api.TemperatureOfDay(apiCtx, &coordinates)
+				if err != nil {
+					errorsChan <- err
+				} else {
+					resultsChan <- temp
+				}
+				wg.Done()
+			}(coordinates)
+		}
+		wg.Wait()
+		close(resultsChan)
+	}()
+	for {
+		select {
+		case result, ok := <-resultsChan:
+			if !ok {
+				return average(temps), nil
 			}
-			wg.Done()
-		}(coordinates)
+			temps = append(temps, result)
+		case err := <-errorsChan:
+			return 0, err
+		case <-ctx.Done():
+			return 0, nil
+		}
 	}
-	wg.Wait()
-	if len(errs) != 0 {
-		return 0, errors.New(generateErrorMessage(errs))
-	}
-	return average(temps), nil
 }
 
 func average(items []float32) float32 {
@@ -73,14 +101,4 @@ func average(items []float32) float32 {
 		sum += i
 	}
 	return sum / float32(len(items))
-}
-
-func generateErrorMessage(errs []error) string {
-	message := strings.Builder{}
-	message.WriteString(fmt.Sprintf("При выполнении запроса возникли ошибки (%d): ", len(errs)))
-	for _, e := range errs {
-		message.WriteString(e.Error())
-		message.WriteString("; ")
-	}
-	return message.String()
 }

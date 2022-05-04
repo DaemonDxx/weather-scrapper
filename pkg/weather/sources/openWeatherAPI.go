@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,12 +41,12 @@ func NewOpenWeatherAPI(token *string) weather.Source {
 	return &api
 }
 
-func (w *OpenWeatherSource) GetWeatherByDate(date *time.Time, coordinate *weather.Coordinates) (float32, error) {
+func (w *OpenWeatherSource) GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *weather.Coordinates) (float32, error) {
 	if !validDate(date) {
 		return 0, fmt.Errorf("Превышена максимальная глубина поиска")
 	}
 
-	request, err := w.prepareRequest(date, coordinate)
+	request, err := w.prepareRequest(ctx, date, coordinate)
 	if err != nil {
 		return 0, err
 	}
@@ -64,9 +65,9 @@ func (w *OpenWeatherSource) GetWeatherByDate(date *time.Time, coordinate *weathe
 	return extractAverageTemperature(data), nil
 }
 
-func (w *OpenWeatherSource) prepareRequest(date *time.Time, coordinate *weather.Coordinates) (*http.Request, error) {
+func (w *OpenWeatherSource) prepareRequest(ctx context.Context, date *time.Time, coordinate *weather.Coordinates) (*http.Request, error) {
 	url := fmt.Sprintf(urlTemplate, coordinate.Lat, coordinate.Lon, date.Unix(), *w.token)
-	return http.NewRequest("GET", url, nil)
+	return http.NewRequestWithContext(ctx, "GET", url, nil)
 }
 
 func validDate(date *time.Time) bool {
@@ -95,8 +96,9 @@ func extractBody(response *http.Response) *string {
 
 func extractAverageTemperature(payload *Response) float32 {
 	var sumTemp float32 = 0.0
-	for _, info := range payload.Hourly {
-		sumTemp = sumTemp + info.Temperature
+	period := payload.Hourly[3:12]
+	for _, info := range period {
+		sumTemp += info.Temperature
 	}
-	return sumTemp / float32(len(payload.Hourly))
+	return sumTemp / float32(len(period))
 }
