@@ -4,55 +4,18 @@ import (
 	"context"
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"io/ioutil"
 	"sync"
+	"temperature/internal/repository"
 	"temperature/pkg/weather"
 	"temperature/pkg/weather/sources"
-	"time"
 )
-
-type Config struct {
-	Token        string             `yaml:"token"`
-	Locations    []weather.Location `yaml:"locations,flow"`
-	DatabasePath string             `yaml:"db"`
-	Schedule     string             `yaml:"schedule"`
-}
-
-type Temperature struct {
-	Location *weather.Location
-	Value    float32
-}
-
-type TemperatureEntity struct {
-	Temperature float32
-	Department  string `gorm:"primaryKey;autoIncrement:false"`
-	Day         int    `gorm:"primaryKey;autoIncrement:false"`
-	Month       int    `gorm:"primaryKey;autoIncrement:false"`
-	Year        int    `gorm:"primaryKey;autoIncrement:false"`
-}
 
 type WeatherApplication struct {
 	config     *Config
 	weatherAPI *weather.API
 	signal     chan<- int
-	db         *gorm.DB
+	repository repository.TemperatureRepository
 	cron       *cron.Cron
-}
-
-func (c *Config) LoadFromFile(path string) error {
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	err = yaml.Unmarshal(data, c)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func New(c *Config) *WeatherApplication {
@@ -79,27 +42,25 @@ func (app *WeatherApplication) initWeatherAPI() {
 }
 
 func (app *WeatherApplication) initDB() {
-	log.WithFields(log.Fields{"module": "db"}).Info("Init db...")
-	db, err := gorm.Open(sqlite.Open(app.config.DatabasePath), &gorm.Config{
-		CreateBatchSize: 20,
-	})
+	log.WithFields(log.Fields{"module": "repository"}).Info("Init repository...")
+	repo := repository.New(&app.config.DatabasePath)
+	err := repo.Init()
 	if err != nil {
-		log.WithFields(log.Fields{"module": "db"}).Fatalf("DB open error: %s", err)
+		log.WithFields(log.Fields{"module": "repository"}).Fatalf("Repository init error: %s", err)
 	}
-	err = db.AutoMigrate(&TemperatureEntity{})
-	if err != nil {
-		log.WithFields(log.Fields{"module": "db"}).Fatalf("Migrate db error: %s", err)
-	}
-	app.db = db
-	log.WithFields(log.Fields{"module": "db"}).Info("Db init done")
+	app.repository = repo
+	log.WithFields(log.Fields{"module": "repository"}).Info("Repository init done")
 }
 
 func (app *WeatherApplication) initCron() {
 	log.WithFields(log.Fields{"module": "cron"}).Info("Init cron...")
 	_, err := app.cron.AddFunc(app.config.Schedule, func() {
+		log.Info("Update...")
 		err := app.update()
 		if err != nil {
 			log.Errorf("Update error: %s", err)
+		} else {
+			log.Info("Update done")
 		}
 	})
 	if err != nil {
@@ -117,13 +78,12 @@ func (app *WeatherApplication) Run() <-chan int {
 }
 
 func (app *WeatherApplication) update() error {
-	log.Info("Update...")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errorChan := make(chan error)
 	defer close(errorChan)
 	outChan := app.getTemperatures(ctx, errorChan)
-	results := make([]*Temperature, 0, 10)
+	results := make([]*weather.Temperature, 0, 10)
 
 EXIT:
 	for {
@@ -141,16 +101,14 @@ EXIT:
 			return err
 		}
 	}
-	entities := createEntities(results)
-	if err := app.db.Create(&entities).Error; err != nil {
+	if err := app.repository.Save(results); err != nil {
 		return err
 	}
-	log.Info("Update done")
 	return nil
 }
 
-func (app *WeatherApplication) getTemperatures(ctx context.Context, errors chan<- error) chan *Temperature {
-	results := make(chan *Temperature)
+func (app *WeatherApplication) getTemperatures(ctx context.Context, errors chan<- error) chan *weather.Temperature {
+	results := make(chan *weather.Temperature)
 
 	wg := sync.WaitGroup{}
 
@@ -162,7 +120,7 @@ func (app *WeatherApplication) getTemperatures(ctx context.Context, errors chan<
 				if err != nil {
 					errors <- err
 				} else {
-					results <- &Temperature{
+					results <- &weather.Temperature{
 						Location: &location,
 						Value:    temp,
 					}
@@ -175,20 +133,4 @@ func (app *WeatherApplication) getTemperatures(ctx context.Context, errors chan<
 	}()
 
 	return results
-}
-
-func createEntities(t []*Temperature) []TemperatureEntity {
-	entities := make([]TemperatureEntity, 0, len(t))
-	for _, temperature := range t {
-		date := time.Now().AddDate(0, 0, -1)
-		item := TemperatureEntity{
-			Temperature: temperature.Value,
-			Department:  temperature.Location.Description,
-			Day:         date.Day(),
-			Month:       int(date.Month()),
-			Year:        date.Year(),
-		}
-		entities = append(entities, item)
-	}
-	return entities
 }

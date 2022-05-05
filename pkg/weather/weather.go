@@ -17,6 +17,11 @@ type Location struct {
 	Coordinates []Coordinates `yaml:"coordinates,flow"`
 }
 
+type Temperature struct {
+	Location *Location
+	Value    float32
+}
+
 type Result struct {
 	Temperature float32
 	Err         error
