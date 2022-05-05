@@ -18,6 +18,7 @@ type Config struct {
 	Token        string             `yaml:"token"`
 	Locations    []weather.Location `yaml:"locations,flow"`
 	DatabasePath string             `yaml:"db"`
+	Schedule     string             `yaml:"schedule"`
 }
 
 type Temperature struct {
@@ -38,6 +39,7 @@ type WeatherApplication struct {
 	weatherAPI *weather.API
 	signal     chan<- int
 	db         *gorm.DB
+	cron       *cron.Cron
 }
 
 func (c *Config) LoadFromFile(path string) error {
@@ -56,9 +58,11 @@ func (c *Config) LoadFromFile(path string) error {
 func New(c *Config) *WeatherApplication {
 	app := WeatherApplication{
 		config: c,
+		cron:   cron.New(),
 	}
 	app.initWeatherAPI()
 	app.initDB()
+	app.initCron()
 	return &app
 }
 
@@ -90,18 +94,25 @@ func (app *WeatherApplication) initDB() {
 	log.WithFields(log.Fields{"module": "db"}).Info("Db init done")
 }
 
+func (app *WeatherApplication) initCron() {
+	log.WithFields(log.Fields{"module": "cron"}).Info("Init cron...")
+	_, err := app.cron.AddFunc(app.config.Schedule, func() {
+		err := app.update()
+		if err != nil {
+			log.Errorf("Update error: %s", err)
+		}
+	})
+	if err != nil {
+		log.WithFields(log.Fields{"module": "cron"}).Fatalf("Crin init error: %s", err)
+	}
+	log.WithFields(log.Fields{"module": "cron"}).Info("Cron init done")
+}
+
 func (app *WeatherApplication) Run() <-chan int {
 	log.Info("Run application")
 	signal := make(chan int)
 	app.signal = signal
-	go func() {
-		err := app.update()
-		if err != nil {
-			fmt.Println(err)
-			signal <- 2
-		}
-		signal <- 0
-	}()
+	app.cron.Start()
 	return signal
 }
 
