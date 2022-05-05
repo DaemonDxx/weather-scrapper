@@ -102,8 +102,9 @@ func (app *WeatherApplication) Run() <-chan int {
 func (app *WeatherApplication) update() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	outChan, errorsChan := app.getTemperatures(ctx)
+	errorChan := make(chan error)
+	defer close(errorChan)
+	outChan := app.getTemperatures(ctx, errorChan)
 	results := make([]*Temperature, 0, 10)
 
 EXIT:
@@ -114,8 +115,11 @@ EXIT:
 				break EXIT
 			}
 			results = append(results, r)
-			fmt.Printf("Средняя температруа в %s равно %0.1f \n\r", r.Location.Description, r.Value)
-		case err := <-errorsChan:
+			log.WithFields(log.Fields{
+				"department":  r.Location.Description,
+				"temperature": r.Value,
+			}).Info("Get temperature")
+		case err := <-errorChan:
 			return err
 		}
 	}
@@ -123,12 +127,12 @@ EXIT:
 	if err := app.db.Create(&entities).Error; err != nil {
 		return err
 	}
+	log.Info("Update done")
 	return nil
 }
 
-func (app *WeatherApplication) getTemperatures(ctx context.Context) (chan *Temperature, chan error) {
-	results := make(chan *Temperature, len(app.config.Locations))
-	errors := make(chan error, len(app.config.Locations))
+func (app *WeatherApplication) getTemperatures(ctx context.Context, errors chan<- error) chan *Temperature {
+	results := make(chan *Temperature)
 
 	wg := sync.WaitGroup{}
 
@@ -150,10 +154,9 @@ func (app *WeatherApplication) getTemperatures(ctx context.Context) (chan *Tempe
 		}
 		wg.Wait()
 		close(results)
-		close(errors)
 	}()
 
-	return results, errors
+	return results
 }
 
 func createEntities(t []*Temperature) []TemperatureEntity {
