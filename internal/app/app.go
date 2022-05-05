@@ -2,7 +2,8 @@ package app
 
 import (
 	"context"
-	"fmt"
+	"github.com/robfig/cron/v3"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -62,30 +63,35 @@ func New(c *Config) *WeatherApplication {
 }
 
 func (app *WeatherApplication) initWeatherAPI() {
+	log.WithFields(log.Fields{"module": "weather"}).Info("Init weather API...")
 	source := sources.NewOpenWeatherAPI(&app.config.Token)
 	//source := sources.FakeSource{}
 	api, err := weather.New(source)
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{"module": "weather"}).Fatalf("Weather API init error: %s", err)
 	}
 	app.weatherAPI = api
+	log.WithFields(log.Fields{"module": "weather"}).Info("Weather API init done")
 }
 
 func (app *WeatherApplication) initDB() {
+	log.WithFields(log.Fields{"module": "db"}).Info("Init db...")
 	db, err := gorm.Open(sqlite.Open(app.config.DatabasePath), &gorm.Config{
 		CreateBatchSize: 20,
 	})
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{"module": "db"}).Fatalf("DB open error: %s", err)
 	}
 	err = db.AutoMigrate(&TemperatureEntity{})
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{"module": "db"}).Fatalf("Migrate db error: %s", err)
 	}
 	app.db = db
+	log.WithFields(log.Fields{"module": "db"}).Info("Db init done")
 }
 
 func (app *WeatherApplication) Run() <-chan int {
+	log.Info("Run application")
 	signal := make(chan int)
 	app.signal = signal
 	go func() {
@@ -100,6 +106,7 @@ func (app *WeatherApplication) Run() <-chan int {
 }
 
 func (app *WeatherApplication) update() error {
+	log.Info("Update...")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errorChan := make(chan error)
