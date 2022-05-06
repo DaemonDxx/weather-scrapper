@@ -1,8 +1,9 @@
-package app
+package scrapper
 
 import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"temperature/internal/report"
 	"temperature/pkg/weather"
 )
 
@@ -11,6 +12,7 @@ type Config struct {
 	Locations    []weather.Location `yaml:"locations,flow"`
 	DatabasePath string             `yaml:"db"`
 	Schedule     string             `yaml:"schedule"`
+	Reporter     report.Config      `yaml:"reporter"`
 }
 
 func (c *Config) LoadFromFile(path string) error {

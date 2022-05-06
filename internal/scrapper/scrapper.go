@@ -5,7 +5,6 @@ import (
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"sync"
-	"temperature/internal/report"
 	"temperature/internal/storage"
 	"temperature/pkg/weather"
 	"temperature/pkg/weather/sources"
@@ -72,11 +71,6 @@ func (scrapper *Scrapper) initCron() {
 
 func (scrapper *Scrapper) Run() {
 	log.Info("Run application")
-	reporter := report.NewExcelReporter(scrapper.storage, &scrapper.config.Reporter)
-	_, err := reporter.Get()
-	if err != nil {
-		panic(err)
-	}
 	scrapper.cron.Start()
 }
 

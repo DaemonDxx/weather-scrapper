@@ -1,6 +1,12 @@
 token: b291443b79e829aa2ac83fbb01f847ba
 #Production schedule: 0 30 3 ? * MON *
 schedule: "* * * * *"
+
+reporter:
+  tempDir: ./
+  template: ./template.xlsx
+  sheet: Источник
+
 db: ./test.db
 
 locations:
