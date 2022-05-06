@@ -1,10 +1,8 @@
-package repository
+package storage
 
 import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"temperature/pkg/weather"
-	"time"
 )
 
 type TemperatureEntity struct {
@@ -17,7 +15,9 @@ type TemperatureEntity struct {
 
 type TemperatureRepository interface {
 	Init() error
-	Save(t []*weather.Temperature) error
+	Save(t *TemperatureEntity) error
+	SaveAll(t []*TemperatureEntity) error
+	FindAll() []*TemperatureEntity
 }
 
 type SQLiteRepository struct {
@@ -46,23 +46,16 @@ func (repository *SQLiteRepository) Init() error {
 	return nil
 }
 
-func (repository *SQLiteRepository) Save(temperature []*weather.Temperature) error {
-	entities := createEntities(temperature)
-	return repository.db.Create(&entities).Error
+func (repository *SQLiteRepository) Save(t *TemperatureEntity) error {
+	return repository.db.Create(t).Error
 }
 
-func createEntities(t []*weather.Temperature) []TemperatureEntity {
-	entities := make([]TemperatureEntity, 0, len(t))
-	for _, temperature := range t {
-		date := time.Now().AddDate(0, 0, -1)
-		item := TemperatureEntity{
-			Temperature: temperature.Value,
-			Department:  temperature.Location.Description,
-			Day:         date.Day(),
-			Month:       int(date.Month()),
-			Year:        date.Year(),
-		}
-		entities = append(entities, item)
-	}
-	return entities
+func (repository *SQLiteRepository) SaveAll(temperature []*TemperatureEntity) error {
+	return repository.db.Create(temperature).Error
+}
+
+func (repository *SQLiteRepository) FindAll() []*TemperatureEntity {
+	var temps []*TemperatureEntity
+	repository.db.Order("year, month, day, department").Find(&temps)
+	return temps
 }
