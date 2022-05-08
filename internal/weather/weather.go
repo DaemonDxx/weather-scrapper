@@ -12,6 +12,11 @@ type Coordinates struct {
 	Lat float32 `yaml:"lat"`
 }
 
+type Source interface {
+	Init() error
+	GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *Coordinates) (float32, error)
+}
+
 type Location struct {
 	Description string        `yaml:"description"`
 	Coordinates []Coordinates `yaml:"coordinates,flow"`
@@ -25,10 +30,6 @@ type Temperature struct {
 type Result struct {
 	Temperature float32
 	Err         error
-}
-
-type Source interface {
-	GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *Coordinates) (float32, error)
 }
 
 type API struct {

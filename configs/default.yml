@@ -9,6 +9,10 @@ reporter:
 
 db: ./test.db
 
+notifier:
+  telegram:
+    token: 11112312
+
 locations:
   - description: Алтайэнерго
     coordinates:

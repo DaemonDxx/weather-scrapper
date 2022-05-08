@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"temperature/pkg/weather"
+	"temperature/internal/weather"
 	"time"
 )
 

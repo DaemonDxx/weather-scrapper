@@ -1,4 +1,4 @@
-package sources
+package weather
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"temperature/pkg/weather"
 	"time"
 )
 
@@ -31,7 +30,19 @@ type OpenWeatherSource struct {
 	http  *http.Client
 }
 
-func NewOpenWeatherAPI(token *string) weather.Source {
+func (w *OpenWeatherSource) Init() error {
+	date := time.Now().AddDate(0, 0, -1)
+	_, err := w.GetWeatherByDate(context.Background(), &date, &Coordinates{
+		Lon: 0,
+		Lat: 0,
+	})
+	if err != nil {
+		return fmt.Errorf("Не удалось установить соединенение с OpenWeather.com по прочине: %s", err.Error())
+	}
+	return nil
+}
+
+func NewOpenWeatherAPI(token *string) Source {
 	api := OpenWeatherSource{
 		token: token,
 		http: &http.Client{
@@ -41,7 +52,7 @@ func NewOpenWeatherAPI(token *string) weather.Source {
 	return &api
 }
 
-func (w *OpenWeatherSource) GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *weather.Coordinates) (float32, error) {
+func (w *OpenWeatherSource) GetWeatherByDate(ctx context.Context, date *time.Time, coordinate *Coordinates) (float32, error) {
 	if !validDate(date) {
 		return 0, fmt.Errorf("Превышена максимальная глубина поиска")
 	}
@@ -65,7 +76,7 @@ func (w *OpenWeatherSource) GetWeatherByDate(ctx context.Context, date *time.Tim
 	return extractAverageTemperature(data), nil
 }
 
-func (w *OpenWeatherSource) prepareRequest(ctx context.Context, date *time.Time, coordinate *weather.Coordinates) (*http.Request, error) {
+func (w *OpenWeatherSource) prepareRequest(ctx context.Context, date *time.Time, coordinate *Coordinates) (*http.Request, error) {
 	url := fmt.Sprintf(urlTemplate, coordinate.Lat, coordinate.Lon, date.Unix(), *w.token)
 	return http.NewRequestWithContext(ctx, "GET", url, nil)
 }

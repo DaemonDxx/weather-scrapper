@@ -2,19 +2,24 @@ package scrapper
 
 import (
 	"context"
+	"fmt"
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"sync"
+	"temperature/internal/notify"
 	"temperature/internal/storage"
-	"temperature/pkg/weather"
-	"temperature/pkg/weather/sources"
+	weather "temperature/internal/weather"
 )
+
+var logger = log.New()
 
 type Scrapper struct {
 	config     *Config
 	weatherAPI *weather.API
 	storage    storage.Storage
 	cron       *cron.Cron
+	notifier   notify.Notifier
 }
 
 func New(c *Config) *Scrapper {
@@ -25,56 +30,69 @@ func New(c *Config) *Scrapper {
 	app.initWeatherAPI()
 	app.initStorage()
 	app.initCron()
+	app.initNotifier()
 	return &app
 }
 
 func (scrapper *Scrapper) initWeatherAPI() {
-	log.WithFields(log.Fields{"module": "weather"}).Info("Init weather API...")
-	source := sources.NewOpenWeatherAPI(&scrapper.config.Token)
+	logger.Info("Инициализация модуля погоды")
+	source := weather.NewOpenWeatherAPI(&scrapper.config.Token)
 	//source := sources.FakeSource{}
 	api, err := weather.New(source)
 	if err != nil {
-		log.WithFields(log.Fields{"module": "weather"}).Fatalf("Weather API init error: %s", err)
+		logger.Fatalf("Ошибка инициализации модуля погоды : %s", err)
 	}
 	scrapper.weatherAPI = api
-	log.WithFields(log.Fields{"module": "weather"}).Info("Weather API init done")
+	logger.Info("Модуль погоды инициализирован")
 }
 
 func (scrapper *Scrapper) initStorage() {
-	log.WithFields(log.Fields{"module": "storage"}).Info("Storage storage...")
+	logger.Info("Инициализация модуля storage")
 	repo := storage.New(&scrapper.config.DatabasePath)
 	err := repo.Init()
 	if err != nil {
-		log.WithFields(log.Fields{"module": "storage"}).Fatalf("Repository init error: %s", err)
+		logger.Fatalf("Repository init error: %s", err)
 	}
 	storage := storage.NewDBStorage(repo)
 	scrapper.storage = storage
-	log.WithFields(log.Fields{"module": "storage"}).Info("Storage init done")
+	logger.Info("Модуль storage инициализирован")
 }
 
 func (scrapper *Scrapper) initCron() {
-	log.WithFields(log.Fields{"module": "cron"}).Info("Init cron...")
+	logger.Info("Инициализация модуля cron")
 	_, err := scrapper.cron.AddFunc(scrapper.config.Schedule, func() {
-		log.Info("Update...")
-		err := scrapper.update()
+		logger.Info("Старт получения данных о погоде")
+		results, err := scrapper.update()
 		if err != nil {
-			log.Errorf("Update error: %s", err)
+			logger.Errorf("Не удалось получить данные: %s", err)
+			scrapper.notifier.Emit(newErrorUpdateMessage())
 		} else {
-			log.Info("Update done")
+			logger.Info("Данные о погоде получены")
+			scrapper.notifier.Emit(*newSuccessUpdateMessage(results))
 		}
 	})
 	if err != nil {
-		log.WithFields(log.Fields{"module": "cron"}).Fatalf("Crin init error: %s", err)
+		logger.Fatalf("Модуль cron завершился с ошибкой: %s", err)
 	}
-	log.WithFields(log.Fields{"module": "cron"}).Info("Cron init done")
+	logger.Info("Модуль cron инициализирован")
+}
+
+func (scrapper *Scrapper) initNotifier() {
+	logger.Info("Инициализация модуля уведомления")
+	notifier, err := notify.NewTelegramNotifier(scrapper.config.Notifier.Telegram)
+	if err != nil {
+		logger.Fatalf("Модуль уведомления выдал ошибку: %e", err)
+	}
+	scrapper.notifier = notifier
+	logger.Info("Модуль уведомления унициализирован")
 }
 
 func (scrapper *Scrapper) Run() {
-	log.Info("Run application")
+	logger.Info("Run application")
 	scrapper.cron.Start()
 }
 
-func (scrapper *Scrapper) update() error {
+func (scrapper *Scrapper) update() ([]*weather.Temperature, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errorChan := make(chan error)
@@ -90,18 +108,18 @@ EXIT:
 				break EXIT
 			}
 			results = append(results, r)
-			log.WithFields(log.Fields{
-				"department":  r.Location.Description,
-				"temperature": r.Value,
-			}).Info("Get temperature")
+			logger.WithFields(log.Fields{
+				"филиал":      r.Location.Description,
+				"температура": r.Value,
+			}).Info("Получено значение")
 		case err := <-errorChan:
-			return err
+			return nil, err
 		}
 	}
 	if err := scrapper.storage.SaveTemperatureByLastDay(results); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return results, nil
 }
 
 func (scrapper *Scrapper) getTemperatures(ctx context.Context, errors chan<- error) chan *weather.Temperature {
@@ -130,4 +148,18 @@ func (scrapper *Scrapper) getTemperatures(ctx context.Context, errors chan<- err
 	}()
 
 	return results
+}
+
+func newSuccessUpdateMessage(results []*weather.Temperature) *string {
+	builder := strings.Builder{}
+	builder.WriteString("Обновление прошло успешно! \n\r")
+	for _, item := range results {
+		builder.WriteString(fmt.Sprintf("%s - %0.1fC; \n\r", item.Location.Description, item.Value))
+	}
+	message := builder.String()
+	return &message
+}
+
+func newErrorUpdateMessage() string {
+	return "Обновление прошло не удачно"
 }

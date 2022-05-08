@@ -3,9 +3,14 @@ package scrapper
 import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"temperature/internal/notify"
 	"temperature/internal/report"
-	"temperature/pkg/weather"
+	"temperature/internal/weather"
 )
+
+type NotifierConfig struct {
+	Telegram *notify.TelegramNotifierConfig `yaml:"telegram"`
+}
 
 type Config struct {
 	Token        string             `yaml:"token"`
@@ -13,6 +18,7 @@ type Config struct {
 	DatabasePath string             `yaml:"db"`
 	Schedule     string             `yaml:"schedule"`
 	Reporter     report.Config      `yaml:"reporter"`
+	Notifier     NotifierConfig     `yaml:"notifier"`
 }
 
 func (c *Config) LoadFromFile(path string) error {
