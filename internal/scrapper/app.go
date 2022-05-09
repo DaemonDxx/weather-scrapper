@@ -10,6 +10,7 @@ import (
 	"temperature/internal/notify"
 	"temperature/internal/storage"
 	weather "temperature/internal/weather"
+	"time"
 )
 
 var logger = log.New()
@@ -25,7 +26,7 @@ type Scrapper struct {
 func New(c *Config) *Scrapper {
 	app := Scrapper{
 		config: c,
-		cron:   cron.New(),
+		cron:   cron.New(cron.WithLocation(time.UTC)),
 	}
 	app.initWeatherAPI()
 	app.initStorage()
@@ -36,7 +37,7 @@ func New(c *Config) *Scrapper {
 
 func (scrapper *Scrapper) initWeatherAPI() {
 	logger.Info("Инициализация модуля погоды")
-	source := weather.NewOpenWeatherAPI(&scrapper.config.Token)
+	source := weather.NewOpenWeatherAPI(&scrapper.config.Weather.Token)
 	//source := sources.FakeSource{}
 	api, err := weather.New(source)
 	if err != nil {
@@ -48,7 +49,7 @@ func (scrapper *Scrapper) initWeatherAPI() {
 
 func (scrapper *Scrapper) initStorage() {
 	logger.Info("Инициализация модуля storage")
-	repo := storage.New(&scrapper.config.DatabasePath)
+	repo := storage.New(&scrapper.config.DBPath)
 	err := repo.Init()
 	if err != nil {
 		logger.Fatalf("Repository init error: %s", err)

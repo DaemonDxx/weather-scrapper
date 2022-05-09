@@ -1,17 +1,12 @@
-token: b291443b79e829aa2ac83fbb01f847ba
-#Production schedule: 0 30 3 ? * MON *
 schedule: "* * * * *"
+dbPath: ./test.db
 
-reporter:
-  tempDir: ./
-  template: ./template.xlsx
-  sheet: Источник
-
-db: ./test.db
+weather:
+  token: some
 
 notifier:
   telegram:
-    token: 11112312
+    token: 5354681415:some
 
 locations:
   - description: Алтайэнерго

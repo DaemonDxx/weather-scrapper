@@ -1,35 +1,39 @@
 package scrapper
 
 import (
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"github.com/spf13/viper"
 	"temperature/internal/notify"
-	"temperature/internal/report"
 	"temperature/internal/weather"
 )
+
+var ConfigPath = "/etc/scrapper"
+
+type Config struct {
+	Locations []weather.Location `yaml:"locations,flow"`
+	DBPath    string             `yaml:"dbPath"`
+	Schedule  string             `yaml:"schedule"`
+	Notifier  NotifierConfig     `yaml:"notifier"`
+	Weather   WeatherConfig      `yaml:"weather"`
+}
 
 type NotifierConfig struct {
 	Telegram *notify.TelegramNotifierConfig `yaml:"telegram"`
 }
 
-type Config struct {
-	Token        string             `yaml:"token"`
-	Locations    []weather.Location `yaml:"locations,flow"`
-	DatabasePath string             `yaml:"db"`
-	Schedule     string             `yaml:"schedule"`
-	Reporter     report.Config      `yaml:"reporter"`
-	Notifier     NotifierConfig     `yaml:"notifier"`
+type WeatherConfig struct {
+	Token string `yaml:"token"`
 }
 
-func (c *Config) LoadFromFile(path string) error {
-	data, err := ioutil.ReadFile(path)
+func (c *Config) Init() error {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	viper.AddConfigPath(ConfigPath)
+	viper.AddConfigPath("./")
+	viper.AddConfigPath("./configs")
+	err := viper.ReadInConfig()
 	if err != nil {
 		return err
 	}
-	err = yaml.Unmarshal(data, c)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	err = viper.Unmarshal(c)
+	return err
 }
